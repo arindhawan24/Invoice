@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pemecah Invoice</title>
+<title>Satuan Buku</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f5f1;--card:#fff;--tx:#1f1f1c;--mut:#6b6a63;--bd:#e2e0d8;--ac:#1d6b57;--acx:#fff;--dg:#b3261e}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -56,11 +56,6 @@ th:first-child,td:first-child{text-align:left}
     <div class="row" style="margin-top:10px">
       <button class="btn" id="scan" onclick="scan()">Baca invoice</button>
     </div>
-    <details style="margin-top:10px"><summary class="mut">Opsional: pakai Claude API key (hasil lebih akurat)</summary>
-      <label>Anthropic API key (disimpan hanya di browser ini)</label>
-      <input id="apikey" type="password" placeholder="sk-ant-..." autocomplete="off">
-      <p class="mut">Kosongkan untuk memakai OCR gratis di browser (Tesseract). Hasil OCR bisa meleset, jadi selalu cek di langkah 2.</p>
-    </details>
     <div id="msg">Atau isi manual di bawah.</div>
   </div>
 
@@ -180,33 +175,14 @@ function parseText(text){
   }
   return {items:out,total:total};
 }
-function toB64(b){return new Promise(function(r){var f=new FileReader();f.onload=function(){r(f.result.split(",")[1])};f.readAsDataURL(b)})}
-async function scanClaude(key){
-  var b64=await toB64(imgBlob);
-  var prompt="Ini gambar invoice/rincian pesanan belanja online. Balas HANYA JSON tanpa teks lain: "+
-  '{"store":"nama toko atau platform","date":"YYYY-MM-DD atau kosong","items":[{"name":"nama barang singkat","qty":1,"price":harga satuan awal angka}],"total":total pembayaran akhir yang benar-benar dibayar (Total Tagihan / Total Pesanan) angka}. Angka tanpa titik atau Rp.';
-  var r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:prompt}]}]})});
-  var j=await r.json();
-  if(!r.ok)throw new Error((j.error&&j.error.message)||"API error");
-  var t=j.content.map(function(c){return c.text||""}).join("").replace(/```json|```/g,"").trim();
-  return JSON.parse(t);
-}
 async function scan(){
   if(!imgBlob){$("msg").textContent="Pilih gambar dulu.";return}
   $("scan").disabled=true;
   try{
-    var key=$("apikey").value.trim(),d;
-    if(key){
-      $("msg").textContent="Membaca dengan Claude...";
-      d=await scanClaude(key);
-      try{localStorage.setItem("invkey",key)}catch(e){}
-    }else{
-      if(typeof Tesseract==="undefined")throw new Error("Library OCR gagal dimuat, cek koneksi internet.");
-      $("msg").textContent="Membaca dengan OCR (pertama kali bisa 10-30 detik)...";
-      var res=await Tesseract.recognize(imgBlob,"ind+eng",{logger:function(m){if(m.status==="recognizing text")$("msg").textContent="OCR: "+Math.round(m.progress*100)+"%"}});
-      d=parseText(res.data.text);
-    }
+    if(typeof Tesseract==="undefined")throw new Error("Library OCR gagal dimuat, cek koneksi internet.");
+    $("msg").textContent="Membaca dengan OCR (pertama kali bisa 10-30 detik)...";
+    var res=await Tesseract.recognize(imgBlob,"eng",{logger:function(m){if(m.status==="recognizing text")$("msg").textContent="OCR: "+Math.round(m.progress*100)+"%"}});
+    var d=parseText(res.data.text);
     items=(d.items||[]).map(function(x){return {name:x.name||"",qty:Number(x.qty)||1,price:Number(x.price)||0}});
     if(!items.length)items=[{name:"",qty:1,price:0}];
     if(d.store)$("store").value=d.store;if(d.date)$("date").value=d.date;
@@ -248,7 +224,7 @@ function del(id){
   if(!confirm("Hapus catatan ini dari riwayat?"))return;
   hist=hist.filter(function(x){return x.id!=id});persist();renderHist();
 }
-load();renderItems();upCnt();try{var sk=localStorage.getItem("invkey");if(sk)$("apikey").value=sk}catch(e){}
+load();renderItems();upCnt();
 </script>
 </body>
 </html>
