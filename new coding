@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Satuan Buku</title>
+<title>Pemecah Invoice</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f5f1;--card:#fff;--tx:#1f1f1c;--mut:#6b6a63;--bd:#e2e0d8;--ac:#1d6b57;--acx:#fff;--dg:#b3261e}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
