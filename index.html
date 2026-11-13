@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pemecah Invoice</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f5f1;--card:#fff;--tx:#1f1f1c;--mut:#6b6a63;--bd:#e2e0d8;--ac:#1d6b57;--acx:#fff;--dg:#b3261e}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171815;--card:#222320;--tx:#efeee8;--mut:#a09f96;--bd:#35362f;--ac:#5fc4a5;--acx:#10261f;--dg:#f2918a}}
+:root[data-theme="dark"]{--bg:#171815;--card:#222320;--tx:#efeee8;--mut:#a09f96;--bd:#35362f;--ac:#5fc4a5;--acx:#10261f;--dg:#f2918a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 12px}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tabs button{flex:1;padding:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font:inherit;cursor:pointer}
+.tabs button.on{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+input{width:100%;padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.btn{padding:10px 14px;border:0;border-radius:10px;background:var(--ac);color:var(--acx);font:inherit;font-weight:600;cursor:pointer}
+.btn.sec{background:transparent;color:var(--tx);border:1px solid var(--bd);font-weight:500}
+.btn.dg{background:transparent;color:var(--dg);border:1px solid var(--bd);font-weight:500}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.item{display:grid;grid-template-columns:1fr 54px 100px 34px;gap:6px;margin-bottom:6px}
+.item button{border:1px solid var(--bd);background:transparent;color:var(--dg);border-radius:8px;cursor:pointer}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:right}
+th:first-child,td:first-child{text-align:left}
+.big{font-weight:700;color:var(--ac)}
+.mut{color:var(--mut);font-size:13px}
+#prev{max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:none}
+.hi{border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--card)}
+.hi h3{margin:0 0 2px;font-size:15px}
+.hidden{display:none}
+#msg{font-size:13px;color:var(--mut);margin-top:8px;min-height:18px}
+</style>
+</head>
+<body>
+<main>
+<h1>Pemecah Invoice</h1>
+<div class="tabs">
+  <button id="t1" class="on" onclick="tab(1)">Scan Invoice</button>
+  <button id="t2" onclick="tab(2)">Riwayat (<span id="cnt">0</span>)</button>
+</div>
+
+<section id="s1">
+  <div class="card">
+    <h2>1. Unggah gambar invoice</h2>
+    <input type="file" id="file" accept="image/*">
+    <img id="prev" alt="Pratinjau">
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="scan" onclick="scan()">Baca invoice</button>
+    </div>
+    <div id="msg">Atau isi manual di bawah.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. Cek &amp; edit data <span id="editing" class="mut"></span></h2>
+    <label>Nama toko / keterangan</label>
+    <input id="store" placeholder="Contoh: Tokopedia - Elle Kennedy">
+    <label>Tanggal</label>
+    <input id="date" type="date">
+    <label>Barang (nama, jumlah, harga satuan awal)</label>
+    <div id="items"></div>
+    <button class="btn sec" onclick="addItem()">+ Tambah barang</button>
+    <label>Total pembayaran akhir (sudah termasuk diskon, voucher, ongkir, biaya)</label>
+    <input id="total" type="number" inputmode="numeric" placeholder="100840">
+  </div>
+
+  <div class="card">
+    <h2>3. Hasil harga satuan (sudah akumulasi total)</h2>
+    <div class="tw"><table id="res"></table></div>
+    <p class="mut">Total dibagi proporsional sesuai harga awal tiap barang.</p>
+    <div class="row">
+      <button class="btn" onclick="save()">Simpan ke riwayat</button>
+      <button class="btn sec" onclick="reset()">Kosongkan</button>
+    </div>
+  </div>
+</section>
+
+<section id="s2" class="hidden">
+  <div id="hist"></div>
+</section>
+</main>
+
+<script>
+var rp=function(n){return "Rp"+Math.round(n).toLocaleString("id-ID")};
+var items=[{name:"",qty:1,price:0}], editId=null, imgBlob=null, hist=[];
+function $(i){return document.getElementById(i)}
+function load(){try{hist=JSON.parse(localStorage.getItem("invhist")||"[]")}catch(e){hist=[]}}
+function persist(){try{localStorage.setItem("invhist",JSON.stringify(hist))}catch(e){$("msg").textContent="Penyimpanan browser tidak tersedia."}}
+function tab(n){$("s1").classList.toggle("hidden",n!=1);$("s2").classList.toggle("hidden",n!=2);$("t1").classList.toggle("on",n==1);$("t2").classList.toggle("on",n==2);if(n==2)renderHist()}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;")}
+
+function renderItems(){
+  var h="";
+  items.forEach(function(it,i){
+    h+='<div class="item"><input value="'+esc(it.name)+'" placeholder="Nama barang" oninput="upd('+i+',\'name\',this.value)">'+
+    '<input type="number" value="'+it.qty+'" min="1" oninput="upd('+i+',\'qty\',this.value)">'+
+    '<input type="number" value="'+(it.price||"")+'" placeholder="Harga" oninput="upd('+i+',\'price\',this.value)">'+
+    '<button onclick="delItem('+i+')">x</button></div>';
+  });
+  $("items").innerHTML=h;calc();
+}
+function upd(i,k,v){items[i][k]=k=="name"?v:Number(v)||0;calc()}
+function addItem(){items.push({name:"",qty:1,price:0});renderItems()}
+function delItem(i){items.splice(i,1);if(!items.length)items.push({name:"",qty:1,price:0});renderItems()}
+
+function compute(its,total){
+  var base=its.reduce(function(s,x){return s+x.qty*x.price},0);
+  return its.map(function(x){
+    var share=base>0?total*(x.qty*x.price)/base:(its.length?total/its.length:0);
+    var unit=x.qty>0?share/x.qty:0;
+    return {name:x.name,qty:x.qty,price:x.price,unit:Math.round(unit),sub:Math.round(unit)*x.qty};
+  });
+}
+function calc(){
+  var total=Number($("total").value)||0, r=compute(items,total);
+  var h="<tr><th>Barang</th><th>Qty</th><th>Harga awal</th><th>Harga akhir/satuan</th></tr>";
+  r.forEach(function(x){h+="<tr><td>"+esc(x.name||"(tanpa nama)")+"</td><td>"+x.qty+"</td><td>"+rp(x.price)+"</td><td class='big'>"+rp(x.unit)+"</td></tr>"});
+  var sum=r.reduce(function(s,x){return s+x.sub},0);
+  h+="<tr><td colspan='3'><b>Total</b></td><td><b>"+rp(sum)+"</b></td></tr>";
+  $("res").innerHTML=h;
+}
+$("total").addEventListener("input",calc);
+
+$("file").addEventListener("change",function(e){
+  var f=e.target.files[0];if(!f)return;
+  shrink(f,1400).then(function(b){imgBlob=b;var p=$("prev");p.src=URL.createObjectURL(b);p.style.display="block"});
+});
+function shrink(f,max){
+  return new Promise(function(res){
+    var im=new Image();im.onload=function(){
+      var s=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");
+      c.width=im.width*s;c.height=im.height*s;c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+      c.toBlob(res,"image/jpeg",0.85)};
+    im.src=URL.createObjectURL(f);
+  });
+}
+
+async function scan(){
+  if(!imgBlob){$("msg").textContent="Pilih gambar dulu.";return}
+  $("scan").disabled=true;$("msg").textContent="Membaca invoice...";
+  try{
+    var sample=await claude.use("sample");
+    if(!sample){$("msg").textContent="Fitur baca gambar tidak tersedia di sini. Isi manual saja.";return}
+    var prompt="Ini gambar invoice/rincian pesanan belanja online. Ekstrak data dan balas HANYA JSON tanpa teks lain dengan format: "+
+    '{"store":"nama toko atau platform","date":"YYYY-MM-DD atau kosong","items":[{"name":"nama barang singkat","qty":1,"price":harga satuan awal angka}],"total":total pembayaran akhir yang benar-benar dibayar (TOTAL TAGIHAN / Total Pesanan) angka}. '+
+    "Angka tanpa titik/Rp. Jika nama barang panjang, ambil bagian pembeda tiap barang (mis. judul varian).";
+    var d=await sample.json(prompt,{images:[imgBlob]});
+    items=(d.items||[]).map(function(x){return {name:x.name||"",qty:Number(x.qty)||1,price:Number(x.price)||0}});
+    if(!items.length)items=[{name:"",qty:1,price:0}];
+    $("store").value=d.store||"";if(d.date)$("date").value=d.date;
+    $("total").value=d.total||"";
+    renderItems();$("msg").textContent="Selesai. Cek dan edit bila ada yang salah.";
+  }catch(e){$("msg").textContent="Gagal membaca: "+((e&&e.message)||"coba lagi")+". Isi manual bila perlu."}
+  finally{$("scan").disabled=false}
+}
+
+function save(){
+  var total=Number($("total").value)||0;
+  if(!total||!items.some(function(x){return x.price>0})){$("msg").textContent="Isi harga barang dan total dulu.";window.scrollTo(0,0);return}
+  var rec={id:editId||String(Date.now()),store:$("store").value||"Tanpa nama",date:$("date").value||new Date().toISOString().slice(0,10),total:total,items:compute(items,total)};
+  var i=hist.findIndex(function(h){return h.id==rec.id});
+  if(i>=0)hist[i]=rec;else hist.unshift(rec);
+  persist();reset();tab(2);
+}
+function reset(){items=[{name:"",qty:1,price:0}];editId=null;imgBlob=null;$("store").value="";$("date").value="";$("total").value="";$("file").value="";$("prev").style.display="none";$("editing").textContent="";$("msg").textContent="Atau isi manual di bawah.";renderItems();upCnt()}
+function upCnt(){$("cnt").textContent=hist.length}
+
+function renderHist(){
+  upCnt();
+  if(!hist.length){$("hist").innerHTML='<div class="card mut">Belum ada riwayat. Simpan hasil scan dari tab Scan Invoice.</div>';return}
+  $("hist").innerHTML=hist.map(function(h){
+    var rows=h.items.map(function(x){return "<tr><td>"+esc(x.name)+"</td><td>"+x.qty+"</td><td class='big'>"+rp(x.unit)+"</td></tr>"}).join("");
+    return '<div class="hi"><h3>'+esc(h.store)+'</h3><div class="mut">'+h.date+' &middot; Total '+rp(h.total)+'</div>'+
+    '<div class="tw"><table><tr><th>Barang</th><th>Qty</th><th>Harga akhir/satuan</th></tr>'+rows+'</table></div>'+
+    '<div class="row" style="margin-top:8px"><button class="btn sec" onclick="edit(\''+h.id+'\')">Edit</button>'+
+    '<button class="btn dg" onclick="del(\''+h.id+'\')">Hapus</button></div></div>';
+  }).join("");
+}
+function edit(id){
+  var h=hist.find(function(x){return x.id==id});if(!h)return;
+  editId=id;items=h.items.map(function(x){return {name:x.name,qty:x.qty,price:x.price}});
+  $("store").value=h.store;$("date").value=h.date;$("total").value=h.total;
+  $("editing").textContent="(mode edit)";renderItems();tab(1);window.scrollTo(0,0);
+}
+function del(id){
+  if(!confirm("Hapus catatan ini dari riwayat?"))return;
+  hist=hist.filter(function(x){return x.id!=id});persist();renderHist();
+}
+load();renderItems();upCnt();
+</script>
+</body>
+</html>
